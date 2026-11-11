@@ -49,8 +49,12 @@ done
 (( ${#TASKS[@]} )) || usage 2
 
 load_settings
-[[ -n ${RUN_CMD:-} ]] || die "RUN_CMD is not set (settings: $(describe_configs | tr '\n' ' '))."
-[[ -n ${DONE_CMD:-} ]] || die "DONE_CMD is not set (settings: $(describe_configs | tr '\n' ' '))."
+if (( ${#CONFIGS[@]} == 0 )); then
+    die "no submit.conf in $PWD or its parents (up to \$HOME); give one with -c."
+fi
+for v in RUN_CMD DONE_CMD; do
+    [[ -n ${!v:-} ]] || die "$v is not set (settings read: $(describe_configs | tr '\n' ' '))."
+done
 
 abs_dir() { (cd "$1" 2>/dev/null && pwd) || die "task directory '$1' not found."; }
 
