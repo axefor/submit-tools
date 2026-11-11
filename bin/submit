@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# =============================================================================
+# submit [options] [--] CMD [ARGS...]
+#
+# Submits one job running CMD in the current directory, after SETUP. A single
+# argument is taken as shell code (submit 'srun vasp_std > log'); several
+# arguments are run as one command, each passed on unchanged.
+#
+# Options:
+#   -c, --config FILE    project settings, repeatable (default: submit.conf
+#                        in this folder and its parents, outermost first)
+#   -P, --profile NAME   resource profile from the settings (e.g. main, shared)
+#   -t, --time T         walltime
+#   -J, --job-name NAME  job name (default: JOB_NAME, else the directory name)
+#   -x, --sched ARG      extra scheduler argument, repeatable (-x --mem=8G)
+#   -b, --backend NAME   slurm (default) or local (runs it here)
+#   -n, --dry-run        write and print the job script, do not submit
+#   -h, --help
+#
+# Each submission gets a folder LOG_DIR/JOB_NAME_TIMESTAMP with the job
+# script, the settings used and job.out. See README.md for the settings.
+# =============================================================================
+
+set -eo pipefail
+
+self=$(realpath "$0" 2>/dev/null || echo "$0")
+# shellcheck source=../lib/common.sh
+source "$(dirname "$self")/../lib/common.sh"
+
+while (( $# )); do
+    if common_opt "$@"; then
+        shift "$NSHIFT"
+    elif [[ $1 == -- ]]; then
+        shift
+        break
+    elif [[ $1 == -* ]]; then
+        echo "Unknown option $1" >&2
+        usage 2
+    else
+        break
+    fi
+done
+(( $# )) || usage 2
+
+if (( $# == 1 )); then
+    body=$1
+else
+    body=$(printf '%q ' "$@")
+fi
+
+load_settings
+new_run_dir
+write_settings
+write_job "$body"
+echo "Job $JOB_NAME, backend $BACKEND, files in $RUN_DIR"
+submit_job 0

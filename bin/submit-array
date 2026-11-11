@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# =============================================================================
+# submit-array [options] TASKS...
+#
+# Submits a job array with one task per directory; each task runs
+# lib/array_worker.sh in its directory, which runs the calculations there
+# until converged (RUN_CMD, DONE_CMD, CONVERGED_CMD, NEXT_CMD in the settings).
+# TASKS is either one file listing the directories (one per line, '#' comments
+# allowed, relative paths are relative to the file) or the directories.
+#
+# Options:
+#   -c, --config FILE    project settings, repeatable (default: submit.conf
+#                        in this folder and its parents, outermost first)
+#   -P, --profile NAME   resource profile from the settings (e.g. main, shared)
+#   -t, --time T         walltime of each task
+#   -J, --job-name NAME  job name (default: JOB_NAME, else the directory name)
+#   -x, --sched ARG      extra scheduler argument, repeatable (-x --mem=8G)
+#   -p, --parallel N     at most N tasks running at once
+#   -b, --backend NAME   slurm (default) or local (runs tasks one by one here)
+#   -n, --dry-run        write and print the job script, do not submit
+#   -h, --help
+#
+# Each submission gets a folder LOG_DIR/JOB_NAME_TIMESTAMP with the task list,
+# settings, job script, a copy of the worker and one log per task, so editing
+# the settings does not affect queued jobs. See README.md.
+# =============================================================================
+
+set -eo pipefail
+
+self=$(realpath "$0" 2>/dev/null || echo "$0")
+# shellcheck source=../lib/common.sh
+source "$(dirname "$self")/../lib/common.sh"
+
+WORKER_VARS=(RUN_CMD DONE_CMD CALC_MARKER CONVERGED_CMD NEXT_CMD
+             MAX_RUNS MAX_FAILS WALLTIME)
+
+TASKS=()
+while (( $# )); do
+    if common_opt "$@"; then
+        shift "$NSHIFT"
+    else
+        case $1 in
+            -p|--parallel) PARALLEL=${2-}; shift 2 ;;
+            -*)            echo "Unknown option $1" >&2; usage 2 ;;
+            *)             TASKS+=("$1"); shift ;;
+        esac
+    fi
+done
+(( ${#TASKS[@]} )) || usage 2
+
+load_settings
+[[ -n ${RUN_CMD:-} ]] || die "RUN_CMD is not set (settings: $(describe_configs | tr '\n' ' '))."
+[[ -n ${DONE_CMD:-} ]] || die "DONE_CMD is not set (settings: $(describe_configs | tr '\n' ' '))."
+
+abs_dir() { (cd "$1" 2>/dev/null && pwd) || die "task directory '$1' not found."; }
+
+task_dirs=()
+if (( ${#TASKS[@]} == 1 )) && [[ -f ${TASKS[0]} ]]; then
+    list_dir=$(cd "$(dirname "${TASKS[0]}")" && pwd)
+    while IFS= read -r line || [[ -n $line ]]; do
+        line=${line%%#*}
+        line=$(echo "$line" | awk '{ $1 = $1; print }')
+        [[ -z $line ]] && continue
+        [[ $line == /* ]] || line=$list_dir/$line
+        d=$(abs_dir "$line") || exit 1
+        task_dirs+=("$d")
+    done < "${TASKS[0]}"
+else
+    for t in "${TASKS[@]}"; do
+        d=$(abs_dir "$t") || exit 1
+        task_dirs+=("$d")
+    done
+fi
+ntasks=${#task_dirs[@]}
+(( ntasks )) || die "no tasks given."
+
+new_run_dir
+printf '%s\n' "${task_dirs[@]}" > "$RUN_DIR/tasks"
+cp "$LIB_DIR/array_worker.sh" "$RUN_DIR/array_worker.sh"
+write_settings "${WORKER_VARS[@]}"
+write_job "$(cat <<EOF
+id=\${ARRAY_TASK_ID:-\${SLURM_ARRAY_TASK_ID:-\${PBS_ARRAY_INDEX:-\${SGE_TASK_ID:-\${LSB_JOBINDEX:-}}}}}
+task=\$(sed -n "\${id}p" $(printf %q "$RUN_DIR/tasks"))
+[[ -n \$task ]] || { echo "ERROR: no task for array index '\$id'"; exit 1; }
+bash $(printf %q "$RUN_DIR/array_worker.sh") "\$task"
+EOF
+)"
+echo "$ntasks task(s), job $JOB_NAME, backend $BACKEND, files in $RUN_DIR"
+submit_job "$ntasks"
