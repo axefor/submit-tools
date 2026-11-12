@@ -20,9 +20,13 @@
 #   -r, --run CMD        RUN_CMD, overriding the settings files
 #   -d, --done CMD       DONE_CMD, overriding the settings files
 #   -m, --marker FILE    CALC_MARKER, overriding the settings files
+#   -a, --all            also submit tasks whose calculations are all done
 #   -b, --backend NAME   slurm (default) or local (runs tasks one by one here)
 #   -n, --dry-run        write and print the job script, do not submit
 #   -h, --help
+#
+# Without NEXT_CMD, tasks whose calculations all pass DONE_CMD are left out,
+# since they would only start and exit.
 #
 # Each submission gets a folder LOG_DIR/JOB_NAME_TIMESTAMP with the task list,
 # settings, job script, a copy of the worker and one log per task, so editing
@@ -40,6 +44,7 @@ WORKER_VARS=(RUN_CMD DONE_CMD CALC_MARKER CONVERGED_CMD NEXT_CMD
 
 unset "${WORKER_VARS[@]}"
 OPT_RUN= OPT_DONE= OPT_MARKER=
+ALL=0
 TASKS=()
 while (( $# )); do
     if common_opt "$@"; then
@@ -50,6 +55,7 @@ while (( $# )); do
             -r|--run)      OPT_RUN=${2-}; shift 2 ;;
             -d|--done)     OPT_DONE=${2-}; shift 2 ;;
             -m|--marker)   OPT_MARKER=${2-}; shift 2 ;;
+            -a|--all)      ALL=1; shift ;;
             -*)            echo "Unknown option $1" >&2; usage 2 ;;
             *)             TASKS+=("$1"); shift ;;
         esac
@@ -72,6 +78,17 @@ apply_setup_when "$RUN_CMD"
 
 abs_dir() { (cd "$1" 2>/dev/null && pwd) || die "task directory '$1' not found."; }
 
+# Succeeds if task dir $1 has a calc dir for which DONE_CMD fails.
+has_pending() {
+    local dir
+    while IFS= read -r dir; do
+        if ! (cd "$1/$dir" && TASK_DIR=$1 CALC_DIR=$PWD bash -c "$DONE_CMD") >/dev/null 2>&1; then
+            return 0
+        fi
+    done < <(cd "$1" && find . -name "$CALC_MARKER" -not -path '*/.*/*' -exec dirname {} \;)
+    return 1
+}
+
 task_dirs=()
 if (( ${#TASKS[@]} == 1 )) && [[ -f ${TASKS[0]} ]]; then
     list_dir=$(cd "$(dirname "${TASKS[0]}")" && pwd)
@@ -89,8 +106,24 @@ else
         task_dirs+=("$d")
     done
 fi
+(( ${#task_dirs[@]} )) || die "no tasks given."
+
+if [[ -z ${NEXT_CMD:-} ]] && (( ! ALL )); then
+    ngiven=${#task_dirs[@]}
+    pending=()
+    for d in "${task_dirs[@]}"; do
+        if has_pending "$d"; then
+            pending+=("$d")
+        fi
+    done
+    task_dirs=(${pending[@]+"${pending[@]}"})
+    nskipped=$(( ngiven - ${#task_dirs[@]} ))
+    if (( nskipped )); then
+        echo "Skipped $nskipped of $ngiven task(s) with no unfinished calculations (--all to submit them)."
+    fi
+    (( ${#task_dirs[@]} )) || { echo "Nothing to submit."; exit 0; }
+fi
 ntasks=${#task_dirs[@]}
-(( ntasks )) || die "no tasks given."
 
 new_run_dir
 printf '%s\n' "${task_dirs[@]}" > "$RUN_DIR/tasks"

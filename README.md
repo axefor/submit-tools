@@ -124,7 +124,10 @@ The per-directory loop, `lib/array_worker.sh`, repeats these steps:
 5. Run `RUN_CMD` in that dir. After `MAX_FAILS` consecutive failures, stop.
 
 Resubmitting the same task list is safe. Finished dirs are skipped, and a dir
-that was cut off by the walltime is run again. The last line of each task log
+that was cut off by the walltime is run again. Without `NEXT_CMD`, tasks whose
+calc dirs all pass `DONE_CMD` are left out at submission, because they would
+only start and exit; `-a`/`--all` submits them anyway. A task dir can itself be
+the calc dir, e.g. a joblist of VASP folders. The last line of each task log
 is `STATUS: converged|exhausted|max-runs|walltime|failed`, for example:
 `grep -h STATUS logs/*/[0-9]*.out | sort | uniq -c`.
 
