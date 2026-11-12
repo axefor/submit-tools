@@ -21,6 +21,8 @@ TIME=
 PARALLEL=
 DRY_RUN=0
 CLI_SCHED_ARGS=()
+SETUP_PATTERNS=()
+SETUP_CODES=()
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -63,6 +65,24 @@ source_conf() {
     CONF_DIR=$(cd "$(dirname "$1")" && pwd)
     # shellcheck disable=SC1090
     source "$1"
+}
+
+# For settings files: adds CODE to SETUP when the submitted command (RUN_CMD
+# for submit-array) matches the glob PATTERN, e.g. setup_when '*vasp*' 'ml vasp'.
+setup_when() {
+    SETUP_PATTERNS+=("$1")
+    SETUP_CODES+=("$2")
+}
+
+apply_setup_when() {
+    local i
+    for (( i = 0; i < ${#SETUP_PATTERNS[@]}; i++ )); do
+        # shellcheck disable=SC2053
+        if [[ $1 == ${SETUP_PATTERNS[i]} ]]; then
+            SETUP+=$'\n'"${SETUP_CODES[i]}"
+            echo "Command matches '${SETUP_PATTERNS[i]}': setup added."
+        fi
+    done
 }
 
 list_profiles() {

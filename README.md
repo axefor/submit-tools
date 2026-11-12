@@ -61,8 +61,25 @@ submitted from.
 | `SETUP`           | Shell code run in the job before the command (`ml ...`, `export ...`). Append with `SETUP+=`. |
 | `profile_NAME()`  | Function picked with `-P NAME`. It appends resource arguments to `SCHED_ARGS`. |
 | `DEFAULT_PROFILE` | Profile used without `-P`.                                           |
+| `setup_when PATTERN CODE` | Adds `CODE` to `SETUP` when the submitted command matches the glob `PATTERN`. The command is the one given to `submit`, or `RUN_CMD` for `submit-array`. |
 | `JOB_NAME`        | Defaults to the name of the current directory.                       |
 | `LOG_DIR`         | Defaults to `logs`.                                                  |
+
+The cluster settings also work as your personal defaults for the
+`submit-array` variables below. For example, for VASP:
+
+```bash
+CALC_MARKER=INCAR
+DONE_CMD='grep -qs "General timing and accounting" OUTCAR'
+setup_when '*vasp*' '
+ml VASP_MODULE
+export OMP_NUM_THREADS=1
+'
+```
+
+With these, `submit-array -r 'srun vasp_std' joblist` runs VASP in each listed
+folder, and `submit 'srun vasp_std'` gets the module too. Every match is
+printed when you submit.
 
 Scheduler arguments go to `sbatch` in this order: profile, `SCHED_ARGS`,
 `-t`, `-x`. When an option appears more than once, sbatch uses the last one,
@@ -89,7 +106,11 @@ submit -n vasp_prerun.sh                   # dry run: print the job script
 submit-array joblist                       # file with one directory per line
 submit-array runs/*/                       # or the directories themselves
 submit-array -p 20 -t 4:00:00 joblist      # at most 20 tasks running at once
+submit-array -r 'srun vasp_std' joblist    # RUN_CMD from the command line
 ```
+
+`-r`, `-d` and `-m` set `RUN_CMD`, `DONE_CMD` and `CALC_MARKER`, and override
+the settings files.
 
 The per-directory loop, `lib/array_worker.sh`, repeats these steps:
 
@@ -111,7 +132,7 @@ is `STATUS: converged|exhausted|max-runs|walltime|failed`, for example:
 |-----------------|----------|---------------------------------------------------------------|
 | `RUN_CMD`       | calc dir | Runs one calculation. **Required.**                           |
 | `DONE_CMD`      | calc dir | Exit 0 = the calculation is finished. **Required.**           |
-| `CALC_MARKER`   |          | File that marks a calc dir (default `INCAR`).                 |
+| `CALC_MARKER`   |          | File whose presence marks a calc dir. **Required.**           |
 | `CONVERGED_CMD` | task dir | Exit 0 = converged, stop.                                     |
 | `NEXT_CMD`      | task dir | Writes the next calc dir(s).                                  |
 | `MAX_RUNS`      |          | Maximum runs started per task (default 0 = no limit).         |

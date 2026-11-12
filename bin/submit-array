@@ -4,7 +4,8 @@
 #
 # Submits a job array with one task per directory; each task runs
 # lib/array_worker.sh in its directory, which runs the calculations there
-# until converged (RUN_CMD, DONE_CMD, CONVERGED_CMD, NEXT_CMD in the settings).
+# until converged (RUN_CMD, DONE_CMD, CALC_MARKER, CONVERGED_CMD, NEXT_CMD in
+# the settings or options).
 # TASKS is either one file listing the directories (one per line, '#' comments
 # allowed, relative paths are relative to the file) or the directories.
 #
@@ -16,6 +17,9 @@
 #   -J, --job-name NAME  job name (default: JOB_NAME, else the directory name)
 #   -x, --sched ARG      extra scheduler argument, repeatable (-x --mem=8G)
 #   -p, --parallel N     at most N tasks running at once
+#   -r, --run CMD        RUN_CMD, overriding the settings files
+#   -d, --done CMD       DONE_CMD, overriding the settings files
+#   -m, --marker FILE    CALC_MARKER, overriding the settings files
 #   -b, --backend NAME   slurm (default) or local (runs tasks one by one here)
 #   -n, --dry-run        write and print the job script, do not submit
 #   -h, --help
@@ -34,6 +38,8 @@ source "$(dirname "$self")/../lib/common.sh"
 WORKER_VARS=(RUN_CMD DONE_CMD CALC_MARKER CONVERGED_CMD NEXT_CMD
              MAX_RUNS MAX_FAILS WALLTIME)
 
+unset "${WORKER_VARS[@]}"
+OPT_RUN= OPT_DONE= OPT_MARKER=
 TASKS=()
 while (( $# )); do
     if common_opt "$@"; then
@@ -41,6 +47,9 @@ while (( $# )); do
     else
         case $1 in
             -p|--parallel) PARALLEL=${2-}; shift 2 ;;
+            -r|--run)      OPT_RUN=${2-}; shift 2 ;;
+            -d|--done)     OPT_DONE=${2-}; shift 2 ;;
+            -m|--marker)   OPT_MARKER=${2-}; shift 2 ;;
             -*)            echo "Unknown option $1" >&2; usage 2 ;;
             *)             TASKS+=("$1"); shift ;;
         esac
@@ -49,12 +58,17 @@ done
 (( ${#TASKS[@]} )) || usage 2
 
 load_settings
-if (( ${#CONFIGS[@]} == 0 )); then
-    die "no submit.conf in $PWD or its parents (up to \$HOME); give one with -c."
-fi
-for v in RUN_CMD DONE_CMD; do
-    [[ -n ${!v:-} ]] || die "$v is not set (settings read: $(describe_configs | tr '\n' ' '))."
+[[ -n $OPT_RUN ]] && RUN_CMD=$OPT_RUN
+[[ -n $OPT_DONE ]] && DONE_CMD=$OPT_DONE
+[[ -n $OPT_MARKER ]] && CALC_MARKER=$OPT_MARKER
+for v in RUN_CMD DONE_CMD CALC_MARKER; do
+    if [[ -z ${!v:-} ]]; then
+        read_from=$(describe_configs | tr '\n' ' ')
+        (( ${#CONFIGS[@]} )) || read_from+="(no submit.conf in $PWD or its parents)"
+        die "$v is not set; set it in a settings file or with an option. Settings read: ${read_from:-none}"
+    fi
 done
+apply_setup_when "$RUN_CMD"
 
 abs_dir() { (cd "$1" 2>/dev/null && pwd) || die "task directory '$1' not found."; }
 

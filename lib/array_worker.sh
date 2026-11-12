@@ -9,6 +9,8 @@
 #
 #   RUN_CMD        in each calc dir (CALC_DIR exported)        required
 #   DONE_CMD       in each calc dir, exit 0 = finished          required
+# A calc dir is a dir below TASK_DIR containing a file named CALC_MARKER
+# (required).
 #   CONVERGED_CMD  in TASK_DIR, exit 0 = converged, stop        optional
 #   NEXT_CMD       in TASK_DIR, writes new calc dirs            optional
 #
@@ -20,7 +22,7 @@ set -uo pipefail
 
 : "${RUN_CMD:?RUN_CMD is not set}"
 : "${DONE_CMD:?DONE_CMD is not set}"
-CALC_MARKER=${CALC_MARKER:-INCAR}
+: "${CALC_MARKER:?CALC_MARKER is not set}"
 CONVERGED_CMD=${CONVERGED_CMD:-}
 NEXT_CMD=${NEXT_CMD:-}
 MAX_RUNS=${MAX_RUNS:-0}
