@@ -9,7 +9,8 @@
 # Options:
 #   -c, --config FILE    project settings, repeatable (default: submit.conf
 #                        in this folder and its parents, outermost first)
-#   -P, --profile NAME   resource profile from the settings (e.g. main, shared)
+#   -p, --profile NAME   resource profile from the settings (e.g. main, shared);
+#                        -P works too
 #   -t, --time T         walltime
 #   -J, --job-name NAME  job name (default: JOB_NAME, else the directory name)
 #   -x, --sched ARG      extra scheduler argument, repeatable (-x --mem=8G)

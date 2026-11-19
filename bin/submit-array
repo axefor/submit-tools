@@ -12,11 +12,12 @@
 # Options:
 #   -c, --config FILE    project settings, repeatable (default: submit.conf
 #                        in this folder and its parents, outermost first)
-#   -P, --profile NAME   resource profile from the settings (e.g. main, shared)
+#   -p, --profile NAME   resource profile from the settings (e.g. main, shared);
+#                        -P works too
 #   -t, --time T         walltime of each task
 #   -J, --job-name NAME  job name (default: JOB_NAME, else the directory name)
 #   -x, --sched ARG      extra scheduler argument, repeatable (-x --mem=8G)
-#   -p, --parallel N     at most N tasks running at once
+#   -l, --limit N        at most N tasks running at once
 #   -r, --run CMD        RUN_CMD, overriding the settings files
 #   -d, --done CMD       DONE_CMD, overriding the settings files
 #   -m, --marker FILE    CALC_MARKER, overriding the settings files
@@ -51,7 +52,7 @@ while (( $# )); do
         shift "$NSHIFT"
     else
         case $1 in
-            -p|--parallel) PARALLEL=${2-}; shift 2 ;;
+            -l|--limit|--parallel) PARALLEL=${2-}; shift 2 ;;
             -r|--run)      OPT_RUN=${2-}; shift 2 ;;
             -d|--done)     OPT_DONE=${2-}; shift 2 ;;
             -m|--marker)   OPT_MARKER=${2-}; shift 2 ;;

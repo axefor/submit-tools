@@ -59,8 +59,8 @@ submitted from.
 |-------------------|----------------------------------------------------------------------|
 | `SCHED_ARGS`      | Bash array of scheduler arguments. Append with `SCHED_ARGS+=(...)`.  |
 | `SETUP`           | Shell code run in the job before the command (`ml ...`, `export ...`). Append with `SETUP+=`. |
-| `profile_NAME()`  | Function picked with `-P NAME`. It appends resource arguments to `SCHED_ARGS`. |
-| `DEFAULT_PROFILE` | Profile used without `-P`.                                           |
+| `profile_NAME()`  | Function picked with `-p NAME`. It appends resource arguments to `SCHED_ARGS`. |
+| `DEFAULT_PROFILE` | Profile used without `-p`.                                           |
 | `setup_when PATTERN CODE` | Adds `CODE` to `SETUP` when the submitted command matches the glob `PATTERN`. The command is the one given to `submit`, or `RUN_CMD` for `submit-array`. |
 | `JOB_NAME`        | Defaults to the name of the current directory.                       |
 | `LOG_DIR`         | Defaults to `logs`.                                                  |
@@ -95,7 +95,7 @@ can edit the settings after submitting.
 ## submit
 
 ```bash
-submit -P shared -t 1:00:00 srun python sampling.py
+submit -p shared -t 1:00:00 srun python sampling.py
 submit 'srun vasp_std > vasp.log'          # one argument = shell code
 submit -n vasp_prerun.sh                   # dry run: print the job script
 ```
@@ -105,7 +105,7 @@ submit -n vasp_prerun.sh                   # dry run: print the job script
 ```bash
 submit-array joblist                       # file with one directory per line
 submit-array runs/*/                       # or the directories themselves
-submit-array -p 20 -t 4:00:00 joblist      # at most 20 tasks running at once
+submit-array -l 20 -t 4:00:00 joblist      # at most 20 tasks running at once
 submit-array -r 'srun vasp_std' joblist    # RUN_CMD from the command line
 ```
 

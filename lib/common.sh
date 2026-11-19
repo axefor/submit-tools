@@ -36,7 +36,7 @@ common_opt() {
     NSHIFT=2
     case $1 in
         -c|--config)   CONFIGS+=("${2-}") ;;
-        -P|--profile)  PROFILE=${2-} ;;
+        -p|-P|--profile) PROFILE=${2-} ;;
         -t|--time)     TIME=${2-} ;;
         -J|--job-name) JOB_NAME_OPT=${2-} ;;
         -x|--sched)    CLI_SCHED_ARGS+=("${2-}") ;;
