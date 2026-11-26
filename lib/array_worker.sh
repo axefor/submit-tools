@@ -9,16 +9,21 @@
 #
 #   RUN_CMD        in each calc dir (CALC_DIR exported)        required
 #   DONE_CMD       in each calc dir, exit 0 = finished          required
-# A calc dir is a dir below TASK_DIR containing a file named CALC_MARKER
-# (required).
 #   CONVERGED_CMD  in TASK_DIR, exit 0 = converged, stop        optional
 #   NEXT_CMD       in TASK_DIR, writes new calc dirs            optional
+#
+# A calc dir is a dir below TASK_DIR containing a file named CALC_MARKER
+# (required). A calc dir is locked while it runs (lock.sh), so concurrent
+# workers on the same TASK_DIR run different calc dirs.
 #
 # The last line of output is "STATUS: <status>" with status one of converged,
 # exhausted, max-runs, walltime, failed.
 # =============================================================================
 
 set -uo pipefail
+
+# shellcheck source=lock.sh
+source "$(dirname "$0")/lock.sh"
 
 : "${RUN_CMD:?RUN_CMD is not set}"
 : "${DONE_CMD:?DONE_CMD is not set}"
@@ -78,15 +83,21 @@ list_calc_dirs() {
 
 is_done() { (cd "$1" && CALC_DIR=$PWD bash -c "$DONE_CMD") >/dev/null 2>&1; }
 
-# Sets n_done and pending (first unfinished calc dir not failed in this job).
+# Sets n_done, n_busy (locked by other jobs) and pending (first unfinished
+# calc dir that is neither locked nor skipped in this job).
 scan() {
     local dir
     n_done=0
+    n_busy=0
     pending=
     while IFS= read -r dir; do
         if is_done "$dir"; then
             n_done=$(( n_done + 1 ))
-        elif [[ -z $pending && $failed != *$'\n'"$dir"$'\n'* ]]; then
+        elif [[ $skipped == *$'\n'"$dir"$'\n'* ]]; then
+            :
+        elif lock_held "$dir"; then
+            n_busy=$(( n_busy + 1 ))
+        elif [[ -z $pending ]]; then
             pending=$dir
         fi
     done < <(list_calc_dirs)
@@ -100,7 +111,10 @@ log "Task: $TASK_DIR (host $(hostname))"
 deadline=$(job_deadline) || deadline=
 [[ -n $deadline ]] || log "Walltime unknown, runs are started regardless of time left."
 
-failed=$'\n'
+skipped=$'\n'
+locked=
+trap '[[ -n $locked ]] && lock_release "$locked"' EXIT
+trap 'exit 143' TERM INT HUP
 n_runs=0
 n_fails=0
 longest=0
@@ -125,7 +139,7 @@ while :; do
             generated=1
             continue
         fi
-        finish exhausted "No calculations left to run ($n_done finished)."
+        finish exhausted "No calculations left to run ($n_done finished, $n_busy running in other jobs)."
     fi
     generated=0
 
@@ -139,10 +153,18 @@ while :; do
         fi
     fi
 
+    if ! lock_take "$pending"; then
+        log "$pending was just taken by another job."
+        skipped+="$pending"$'\n'
+        continue
+    fi
+    locked=$pending
     log "Running $pending ($n_done finished so far)."
     start=$(date +%s)
     (cd "$pending" && CALC_DIR=$PWD bash -c "$RUN_CMD")
     rc=$?
+    lock_release "$pending"
+    locked=
     took=$(( $(date +%s) - start ))
     (( took > longest )) && longest=$took
     n_runs=$(( n_runs + 1 ))
@@ -152,7 +174,7 @@ while :; do
         n_fails=0
     else
         log "FAILED $pending after ${took}s (exit code $rc)."
-        failed+="$pending"$'\n'
+        skipped+="$pending"$'\n'
         n_fails=$(( n_fails + 1 ))
         (( n_fails >= MAX_FAILS )) && finish failed "$n_fails consecutive failures."
     fi

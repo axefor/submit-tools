@@ -26,8 +26,8 @@
 #   -n, --dry-run        write and print the job script, do not submit
 #   -h, --help
 #
-# Without NEXT_CMD, tasks whose calculations all pass DONE_CMD are left out,
-# since they would only start and exit.
+# Without NEXT_CMD, tasks with no calculation left to start (all pass
+# DONE_CMD or run in other jobs) are left out, since they would only exit.
 #
 # Each submission gets a folder LOG_DIR/JOB_NAME_TIMESTAMP with the task list,
 # settings, job script, a copy of the worker and one log per task, so editing
@@ -39,6 +39,8 @@ set -eo pipefail
 self=$(realpath "$0" 2>/dev/null || echo "$0")
 # shellcheck source=../lib/common.sh
 source "$(dirname "$self")/../lib/common.sh"
+# shellcheck source=../lib/lock.sh
+source "$LIB_DIR/lock.sh"
 
 WORKER_VARS=(RUN_CMD DONE_CMD CALC_MARKER CONVERGED_CMD NEXT_CMD
              MAX_RUNS MAX_FAILS WALLTIME)
@@ -79,11 +81,12 @@ apply_setup_when "$RUN_CMD"
 
 abs_dir() { (cd "$1" 2>/dev/null && pwd) || die "task directory '$1' not found."; }
 
-# Succeeds if task dir $1 has a calc dir for which DONE_CMD fails.
+# Succeeds if task dir $1 has an unfinished calc dir not locked by a job.
 has_pending() {
     local dir
     while IFS= read -r dir; do
-        if ! (cd "$1/$dir" && TASK_DIR=$1 CALC_DIR=$PWD bash -c "$DONE_CMD") >/dev/null 2>&1; then
+        if ! (cd "$1/$dir" && TASK_DIR=$1 CALC_DIR=$PWD bash -c "$DONE_CMD") >/dev/null 2>&1 &&
+            ! lock_held "$1/$dir"; then
             return 0
         fi
     done < <(cd "$1" && find . -name "$CALC_MARKER" -not -path '*/.*/*' -exec dirname {} \;)
@@ -120,7 +123,7 @@ if [[ -z ${NEXT_CMD:-} ]] && (( ! ALL )); then
     task_dirs=(${pending[@]+"${pending[@]}"})
     nskipped=$(( ngiven - ${#task_dirs[@]} ))
     if (( nskipped )); then
-        echo "Skipped $nskipped of $ngiven task(s) with no unfinished calculations (--all to submit them)."
+        echo "Skipped $nskipped of $ngiven task(s) with nothing left to start (--all to submit them)."
     fi
     (( ${#task_dirs[@]} )) || { echo "Nothing to submit."; exit 0; }
 fi
@@ -128,7 +131,7 @@ ntasks=${#task_dirs[@]}
 
 new_run_dir
 printf '%s\n' "${task_dirs[@]}" > "$RUN_DIR/tasks"
-cp "$LIB_DIR/array_worker.sh" "$RUN_DIR/array_worker.sh"
+cp "$LIB_DIR/array_worker.sh" "$LIB_DIR/lock.sh" "$RUN_DIR/"
 write_settings "${WORKER_VARS[@]}"
 write_job "$(cat <<EOF
 id=\${ARRAY_TASK_ID:-\${SLURM_ARRAY_TASK_ID:-\${PBS_ARRAY_INDEX:-\${SGE_TASK_ID:-\${LSB_JOBINDEX:-}}}}}

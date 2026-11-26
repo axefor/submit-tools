@@ -14,6 +14,7 @@ which is useful for testing.
 bin/submit, bin/submit-array   the commands
 lib/common.sh                  settings, profiles, backends
 lib/array_worker.sh            the per-directory loop of submit-array
+lib/lock.sh                    locks of calc dirs
 vasp/vasp_prerun.sh            VASP prerun + main run in scratch
 vasp/vasp_time.sh              table of VASP and Slurm run times
 examples/                      cluster.conf, submit.conf
@@ -123,11 +124,23 @@ The per-directory loop, `lib/array_worker.sh`, repeats these steps:
 4. If the walltime left is less than 1.2× the longest run so far, stop.
 5. Run `RUN_CMD` in that dir. After `MAX_FAILS` consecutive failures, stop.
 
-Resubmitting the same task list is safe. Finished dirs are skipped, and a dir
-that was cut off by the walltime is run again. Without `NEXT_CMD`, tasks whose
-calc dirs all pass `DONE_CMD` are left out at submission, because they would
-only start and exit; `-a`/`--all` submits them anyway. A task dir can itself be
-the calc dir, e.g. a joblist of VASP folders. The last line of each task log
+Resubmitting the same task list is safe, even while the first submission is
+still queued or running:
+
+- Finished dirs are skipped.
+- A dir that was cut off by the walltime is run again.
+- A running calc dir is locked (a `.running` folder in it holding the job ID),
+  so no two jobs run the same calc dir. Other workers skip it.
+- A lock whose job no longer exists (per `squeue`, or the process for local
+  runs) is stale and gets taken over, for example after a walltime kill.
+- Two tasks on the same task dir thus work on different calc dirs. With
+  `NEXT_CMD` writing new folders, as `dups write-folders --next` does, they
+  run different snapshots in parallel.
+
+Without `NEXT_CMD`, tasks with nothing left to start (all calc dirs pass
+`DONE_CMD` or are locked by running jobs) are left out at submission, because
+they would only start and exit; `-a`/`--all` submits them anyway. A task dir
+can itself be the calc dir, e.g. a joblist of VASP folders. The last line of each task log
 is `STATUS: converged|exhausted|max-runs|walltime|failed`, for example:
 `grep -h STATUS logs/*/[0-9]*.out | sort | uniq -c`.
 
