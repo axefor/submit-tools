@@ -83,9 +83,12 @@ folder, and `submit 'srun vasp_std'` gets the module too. Every match is
 printed when you submit.
 
 Scheduler arguments go to `sbatch` in this order: profile, `SCHED_ARGS`,
-`-t`, `-x`. When an option appears more than once, sbatch uses the last one,
-so `SCHED_ARGS+=(-t 24:00:00)` in a project overrides the cluster default,
-and `-t 1:00:00` on the command line overrides both.
+`-t`, then `-N`, `--ntasks-per-node`, `--ntasks` and `-x` in the order given.
+When an option appears more than once, sbatch uses the last one, so
+`SCHED_ARGS+=(-t 24:00:00)` in a project overrides the cluster default, and
+`-t 1:00:00` on the command line overrides both. In the same way,
+`submit -p main -N 2 --ntasks-per-node 64 ...` changes the node shape of the
+`main` profile.
 
 Every submission creates `LOG_DIR/JOB_NAME_TIMESTAMP/`. It holds the job
 script, copies of the settings files used (listed in order in `configs`),

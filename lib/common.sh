@@ -40,6 +40,10 @@ common_opt() {
         -t|--time)     TIME=${2-} ;;
         -J|--job-name) JOB_NAME_OPT=${2-} ;;
         -x|--sched)    CLI_SCHED_ARGS+=("${2-}") ;;
+        -N|--nodes|--ntasks|--ntasks-per-node)
+                       CLI_SCHED_ARGS+=("$1" "${2-}") ;;
+        --nodes=*|--ntasks=*|--ntasks-per-node=*)
+                       CLI_SCHED_ARGS+=("$1"); NSHIFT=1 ;;
         -b|--backend)  BACKEND=${2-} ;;
         -n|--dry-run)  DRY_RUN=1; NSHIFT=1 ;;
         -h|--help)     usage ;;

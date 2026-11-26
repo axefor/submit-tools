@@ -13,6 +13,9 @@
 #                        -P works too
 #   -t, --time T         walltime
 #   -J, --job-name NAME  job name (default: JOB_NAME, else the directory name)
+#   -N, --nodes N        number of nodes
+#   --ntasks-per-node N, --ntasks N
+#                        MPI tasks per node / in total
 #   -x, --sched ARG      extra scheduler argument, repeatable (-x --mem=8G)
 #   -b, --backend NAME   slurm (default) or local (runs it here)
 #   -n, --dry-run        write and print the job script, do not submit

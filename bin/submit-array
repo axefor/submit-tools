@@ -16,6 +16,9 @@
 #                        -P works too
 #   -t, --time T         walltime of each task
 #   -J, --job-name NAME  job name (default: JOB_NAME, else the directory name)
+#   -N, --nodes N        number of nodes
+#   --ntasks-per-node N, --ntasks N
+#                        MPI tasks per node / in total
 #   -x, --sched ARG      extra scheduler argument, repeatable (-x --mem=8G)
 #   -l, --limit N        at most N tasks running at once
 #   -r, --run CMD        RUN_CMD, overriding the settings files
